@@ -1,0 +1,265 @@
+name: Assignment 6 Autograding
+
+on:
+  push:
+    paths:
+      - '**.sql'
+      - '.github/workflows/autograding.yml'
+  workflow_dispatch:
+
+jobs:
+  autograding:
+
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+
+      # ==========================================
+      # 1. Checkout repository
+      # ==========================================
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+
+      # ==========================================
+      # 2. Display repository files
+      # ==========================================
+      - name: Find SQL Files
+        run: |
+          echo "Current directory:"
+          pwd
+
+          echo ""
+          echo "Repository files:"
+          find . -type f | sort
+
+          echo ""
+          echo "SQL files:"
+          find . -type f -name "*.sql" | sort
+
+
+      # ==========================================
+      # 3. Find starter.sql
+      # ==========================================
+      - name: Locate Starter File
+        id: starter
+        run: |
+
+          STARTER=$(find . -type f -iname "starter.sql" | head -n 1)
+
+          if [ -z "$STARTER" ]; then
+            echo "ERROR: starter.sql was not found."
+            echo ""
+            echo "Available SQL files:"
+            find . -type f -name "*.sql" | sort
+            exit 1
+          fi
+
+          echo "Starter file found:"
+          echo "$STARTER"
+
+          echo "starter_file=$STARTER" >> "$GITHUB_OUTPUT"
+
+
+      # ==========================================
+      # 4. Find answer.sql
+      # ==========================================
+      - name: Locate Answer File
+        id: answer
+        run: |
+
+          ANSWER=$(find . -type f -iname "answer.sql" | head -n 1)
+
+          if [ -z "$ANSWER" ]; then
+            echo "ERROR: answer.sql was not found."
+            echo ""
+            echo "Available SQL files:"
+            find . -type f -name "*.sql" | sort
+            exit 1
+          fi
+
+          echo "Answer file found:"
+          echo "$ANSWER"
+
+          echo "answer_file=$ANSWER" >> "$GITHUB_OUTPUT"
+
+
+      # ==========================================
+      # 5. Find test.sql
+      # ==========================================
+      - name: Locate Test File
+        id: test
+        run: |
+
+          TEST=$(find . -type f -iname "test.sql" | head -n 1)
+
+          if [ -z "$TEST" ]; then
+            echo "ERROR: test.sql was not found."
+            echo ""
+            echo "Available SQL files:"
+            find . -type f -name "*.sql" | sort
+            exit 1
+          fi
+
+          echo "Test file found:"
+          echo "$TEST"
+
+          echo "test_file=$TEST" >> "$GITHUB_OUTPUT"
+
+
+      # ==========================================
+      # 6. Check MySQL
+      # ==========================================
+      - name: Check MySQL
+        run: |
+
+          echo "Checking MySQL connection..."
+
+          mysql -h 127.0.0.1 -u root -proot \
+          -e "SELECT VERSION();"
+
+          echo "MySQL connection successful."
+
+
+      # ==========================================
+      # 7. Run starter.sql
+      # ==========================================
+      - name: Run Starter SQL
+        run: |
+
+          echo "Running starter SQL..."
+
+          mysql -h 127.0.0.1 -u root -proot \
+          < "${{ steps.starter.outputs.starter_file }}"
+
+          echo "Starter SQL executed successfully."
+
+
+      # ==========================================
+      # 8. Run answer.sql
+      # ==========================================
+      - name: Run Student Answer
+        run: |
+
+          echo "Running student answer..."
+
+          mysql -h 127.0.0.1 -u root -proot CollegeDB \
+          < "${{ steps.answer.outputs.answer_file }}"
+
+          echo "Student answer executed successfully."
+
+
+      # ==========================================
+      # 9. Run test.sql
+      # ==========================================
+      - name: Run Test Cases
+        run: |
+
+          echo "Running test cases..."
+
+          mysql -h 127.0.0.1 -u root -proot CollegeDB \
+          < "${{ steps.test.outputs.test_file }}"
+
+
+      # ==========================================
+      # 10. Display final Student table
+      # ==========================================
+      - name: Display Final Student Table
+        run: |
+
+          echo "=========================================="
+          echo "FINAL STUDENT TABLE"
+          echo "=========================================="
+
+          mysql -h 127.0.0.1 -u root -proot CollegeDB \
+          -e "SELECT * FROM Student;"
+
+
+      # ==========================================
+      # 11. Validate assignment
+      # ==========================================
+      - name: Validate Assignment
+        run: |
+
+          echo "=========================================="
+          echo "VALIDATING ASSIGNMENT"
+          echo "=========================================="
+
+
+          # Arun must remain in Department 101
+          ARUN=$(mysql -h 127.0.0.1 -u root -proot CollegeDB -N -e "
+          SELECT COUNT(*)
+          FROM Student
+          WHERE StudentID = 1001
+          AND StudentName = 'Arun'
+          AND Gender = 'Male'
+          AND DepartmentID = 101;
+          ")
+
+
+          # Karthik must be changed to Department 103
+          KARTHIK=$(mysql -h 127.0.0.1 -u root -proot CollegeDB -N -e "
+          SELECT COUNT(*)
+          FROM Student
+          WHERE StudentID = 1003
+          AND StudentName = 'Karthik'
+          AND Gender = 'Male'
+          AND DepartmentID = 103;
+          ")
+
+
+          # Divya must be deleted
+          DIVYA=$(mysql -h 127.0.0.1 -u root -proot CollegeDB -N -e "
+          SELECT COUNT(*)
+          FROM Student
+          WHERE StudentID = 1002;
+          ")
+
+
+          # Only two students should remain
+          TOTAL=$(mysql -h 127.0.0.1 -u root -proot CollegeDB -N -e "
+          SELECT COUNT(*)
+          FROM Student;
+          ")
+
+
+          echo "Arun check       : $ARUN"
+          echo "Karthik check    : $KARTHIK"
+          echo "Divya check      : $DIVYA"
+          echo "Total students   : $TOTAL"
+
+
+          echo ""
+          echo "=========================================="
+          echo "TEST RESULT"
+          echo "=========================================="
+
+
+          if [ "$ARUN" -eq 1 ] && \
+             [ "$KARTHIK" -eq 1 ] && \
+             [ "$DIVYA" -eq 0 ] && \
+             [ "$TOTAL" -eq 2 ]; then
+
+            echo "ALL TEST CASES PASSED"
+            echo "ASSIGNMENT 6 PASSED"
+
+          else
+
+            echo "TEST CASES FAILED"
+            echo "ASSIGNMENT 6 FAILED"
+            exit 1
+
+          fi
