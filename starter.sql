@@ -1,4 +1,3 @@
-
 CREATE DATABASE IF NOT EXISTS CollegeDB;
 USE CollegeDB;
 
